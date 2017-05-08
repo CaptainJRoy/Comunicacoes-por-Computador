@@ -127,8 +127,8 @@ class Pooling implements Runnable{
 			Process proc = Runtime.getRuntime().exec(new String[] {"bash", "-c", "netstat -an | grep tcp | wc -l"});
 			BufferedReader br = new BufferedReader (new InputStreamReader (proc.getInputStream()));
 
-			long tempoFinal = (new Date()).getTime();
 			long tempoEnvio = Long.parseLong(tempoE);
+			long tempoFinal = (new Date()).getTime();
 			String sentence = "resposta " + id + " " + br.readLine() + " " + Long.toString(tempoFinal - tempoInicial + tempoEnvio);
 			sendData = sentence.getBytes();
 			DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipAddress, 5555);

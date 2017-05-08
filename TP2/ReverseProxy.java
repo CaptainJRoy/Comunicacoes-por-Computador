@@ -15,6 +15,47 @@ class ReverseProxy{
 	}
 }
 
+class EnviaProbe implements Runnable{
+
+	Tabela informacoes;
+	DatagramSocket socket;
+
+	EnviaProbe(Tabela informacoes, DatagramSocket socket){
+		this.informacoes = informacoes;
+		this.socket = socket;
+	}
+
+	public void run(){
+		try{
+			while(true){
+				List<InetAddress> aRemover = new ArrayList<>();
+				List<Servidor> servidores = informacoes.getServidores();
+				for(Servidor s : servidores){
+					InetAddress ipAddress = s.getIpAddress();
+					long tempoAtual = (new Date()).getTime();
+					if (tempoAtual - s.ultimoRecebido > 15000){
+						aRemover.add(ipAddress);
+						continue;
+					}
+					byte[] enviarDados = new byte[1024];
+					int port = 5555;
+					String dados = "pedido " + s.enviar();
+					enviarDados = dados.getBytes();
+					DatagramPacket enviarPacote = new DatagramPacket(enviarDados, enviarDados.length, ipAddress, port);
+					socket.send(enviarPacote);
+				}
+				for (InetAddress ip : aRemover){
+					informacoes.remover(ip);
+				}
+				Thread.sleep(5000);
+			}
+		}
+		catch(IOException | InterruptedException e){
+			e.printStackTrace();
+		}
+	}
+}
+
 class Monitorizacao implements Runnable{
 	Tabela informacoes;
 
@@ -25,6 +66,8 @@ class Monitorizacao implements Runnable{
 	public void run(){
 		try{
 			DatagramSocket socket = new DatagramSocket(5555);
+			Thread probe = new Thread(new EnviaProbe(informacoes, socket));
+			probe.start();
 			while(true){
 				DatagramPacket receberPacote = receberPacote(socket);
 				String dados = new String(receberPacote.getData(), 0, receberPacote.getLength());
@@ -33,7 +76,9 @@ class Monitorizacao implements Runnable{
 					atualizarInformacao(receberPacote, pdu);
 				}
 				else if(pdu[0].equals("registo")){
-					enviarPedido(socket, receberPacote);
+					adicionarServidor(receberPacote);
+
+					//enviarPedido(socket, receberPacote);
 				}
 			}
 		}
@@ -55,7 +100,12 @@ class Monitorizacao implements Runnable{
 		return null;
 	}
 
-	void enviarPedido(DatagramSocket socket, DatagramPacket receberPacote){
+	void adicionarServidor(DatagramPacket receberPacote){
+		InetAddress ipAddress = receberPacote.getAddress();
+		informacoes.registoServidor(ipAddress);
+	}
+
+	/*void enviarPedido(DatagramSocket socket, DatagramPacket receberPacote){
 		InetAddress ipAddress;
 		try{
 			byte[] enviarDados = new byte[1024];
@@ -69,7 +119,7 @@ class Monitorizacao implements Runnable{
 		catch (IOException e){
 			e.printStackTrace();
 		}
-	}
+	}*/
 
 	void atualizarInformacao(DatagramPacket receberPacote, String[] pdu){
 		InetAddress ipAddress = receberPacote.getAddress();
@@ -149,13 +199,26 @@ class Tabela{
 		servidores = new HashMap<>();
 	}
 
-	String enviar(InetAddress ipAddress){
+	List<Servidor> getServidores(){
+		return servidores.values();
+	}
+
+	/*String enviar(InetAddress ipAddress){
 		Servidor s = servidores.get(ipAddress);
 		if (s == null){
 			s = new Servidor (ipAddress);
 			servidores.put(ipAddress, s);
 		}
 		return s.enviar();
+	}*/
+
+	void registoServidor(InetAddress ipAddress){
+		Servidor s = servidores.get(ipAddress);
+		if (s == null){
+			s = new Servidor(ipAddress);
+			servidores.put(ipAddress, s);
+		}
+		s.novoRegisto();
 	}
 
 	void recebido(InetAddress ipAddress, String id, String nTCP, String tempo){
@@ -164,9 +227,9 @@ class Tabela{
 		imprimirTabela();
 	}
 
-	/*void remover(InetAddress ipAddress){
+	void remover(InetAddress ipAddress){
 		servidores.remove(ipAddress);
-	}*/
+	}
 
 	InetAddress getMonitor(){
 		InetAddress ipAddress = null;
@@ -204,8 +267,15 @@ class Servidor{
 	Set<Integer> idsRecebidos;
 
 	Servidor(InetAddress ipAddress){
+		rtt = Float.MAX_VALUE;
+		conexoes = Integer.MAX_VALUE;
 		this.ipAddress = ipAddress;
 		idsRecebidos = new HashSet<>();
+	}
+
+	void novoRegisto(){
+		long tempo = (new Date()).getTime();
+		this.ultimoRecebido = tempo;
 	}
 
 	InetAddress getIpAddress(){
@@ -213,7 +283,7 @@ class Servidor{
 	}
 
 	float getPrioridade(){
-		if ((new Date()).getTime() - this.ultimoRecebido > 15000){
+		if (totalEnviados == 0 || idsRecebidos.size() == 0){
 			return Float.MAX_VALUE;
 		}
 		return rtt * conexoes * ((float) totalEnviados - idsRecebidos.size())/totalEnviados;
@@ -238,7 +308,7 @@ class Servidor{
 			
 		long tempo = tempoRececao - Long.parseLong(tempoEnvioExecucao);
 			
-		if (rtt != 0.0f){
+		if (rtt != Float.MAX_VALUE){
 			rtt = (rtt + tempo)/2;
 		}
 		else {
