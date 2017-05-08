@@ -121,14 +121,16 @@ class Pooling implements Runnable{
 
 	void enviarInformacao(String id, String tempoE){
 		try{
-			long tempoInicial = (new Date()).getTime();
+			//long tempoInicial = (new Date()).getTime();
+			long tempoInicial = System.currentTimeMillis();
 			byte[] sendData = new byte[1024];
 
 			Process proc = Runtime.getRuntime().exec(new String[] {"bash", "-c", "netstat -an | grep tcp | wc -l"});
 			BufferedReader br = new BufferedReader (new InputStreamReader (proc.getInputStream()));
 
 			long tempoEnvio = Long.parseLong(tempoE);
-			long tempoFinal = (new Date()).getTime();
+			//long tempoFinal = (new Date()).getTime();
+			long tempoFinal = System.currentTimeMillis();
 			String sentence = "resposta " + id + " " + br.readLine() + " " + Long.toString(tempoFinal - tempoInicial + tempoEnvio);
 			sendData = sentence.getBytes();
 			DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipAddress, 5555);

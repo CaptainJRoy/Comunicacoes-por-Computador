@@ -29,7 +29,7 @@ class EnviaProbe implements Runnable{
 		try{
 			while(true){
 				List<InetAddress> aRemover = new ArrayList<>();
-				List<Servidor> servidores = informacoes.getServidores();
+				Collection<Servidor> servidores = informacoes.getServidores();
 				for(Servidor s : servidores){
 					InetAddress ipAddress = s.getIpAddress();
 					long tempoAtual = (new Date()).getTime();
@@ -75,10 +75,9 @@ class Monitorizacao implements Runnable{
 				if(pdu[0].equals("resposta")){
 					atualizarInformacao(receberPacote, pdu);
 				}
-				else if(pdu[0].equals("registo")){
+				else if(pdu[0].equals("registo"))
+				{
 					adicionarServidor(receberPacote);
-
-					//enviarPedido(socket, receberPacote);
 				}
 			}
 		}
@@ -91,7 +90,7 @@ class Monitorizacao implements Runnable{
 		try{
 			byte[] receberDados = new byte[1024];
 			DatagramPacket receberPacote = new DatagramPacket(receberDados, receberDados.length);
-			socket.receive(receberPacote);
+			socket.receive(receberPacote); // adormece
 			return receberPacote;
 		}
 		catch(IOException e){
@@ -199,7 +198,7 @@ class Tabela{
 		servidores = new HashMap<>();
 	}
 
-	List<Servidor> getServidores(){
+	Collection<Servidor> getServidores(){
 		return servidores.values();
 	}
 
@@ -274,7 +273,8 @@ class Servidor{
 	}
 
 	void novoRegisto(){
-		long tempo = (new Date()).getTime();
+		//long tempo = (new Date()).getTime();
+		long tempo = System.currentTimeMillis();
 		this.ultimoRecebido = tempo;
 	}
 
@@ -290,7 +290,8 @@ class Servidor{
 	}
 
 	String enviar(){
-		long tempoEnvio = (new Date()).getTime();
+		//long tempoEnvio = (new Date()).getTime();
+		long tempoEnvio = System.currentTimeMillis();
 		this.totalEnviados++;
 		return Integer.toString(nextID++) + " " + Long.toString(tempoEnvio);
 	}
@@ -303,7 +304,8 @@ class Servidor{
 		else{
 			idsRecebidos.add(id);
 		}
-		long tempoRececao = (new Date()).getTime();
+		//long tempoRececao = (new Date()).getTime();
+		long tempoRececao = System.currentTimeMillis();
 		this.ultimoRecebido = tempoRececao;
 			
 		long tempo = tempoRececao - Long.parseLong(tempoEnvioExecucao);
