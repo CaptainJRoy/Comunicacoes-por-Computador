@@ -1,326 +1,279 @@
-import java.io.*;
-import java.net.*;
-import java.util.*;
 
-class ReverseProxy{
-	
-	public static void main(String args[]) throws Exception{
-		Tabela informacoes = new Tabela();
-		
-		Thread monitorizacao = new Thread(new Monitorizacao(informacoes));
-		monitorizacao.start();
-		
-		Thread proxyTCP = new Thread(new ProxyTCP(informacoes));
-		proxyTCP.start();
-	}
-}
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
-class EnviaProbe implements Runnable{
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
 
-	Tabela informacoes;
-	DatagramSocket socket;
+/**
+ *
+ * @author core
+ */
+public class ReverseProxy {
+    public static void main(String[] args){
+        Table table = new Table();
+        Thread monitorization = new Thread(new Monitorization(table));
+        monitorization.start();
+        Thread tcpProxy = new Thread(new TCPProxy(table));
+        tcpProxy.start();
+        
+    }
 
-	EnviaProbe(Tabela informacoes, DatagramSocket socket){
-		this.informacoes = informacoes;
-		this.socket = socket;
-	}
+    private static class Intermediation implements Runnable{
+        
+        Socket client;
+        InetAddress ip;
+        
 
-	public void run(){
-		try{
-			while(true){
-				List<InetAddress> aRemover = new ArrayList<>();
-				Collection<Servidor> servidores = informacoes.getServidores();
-				for(Servidor s : servidores){
-					InetAddress ipAddress = s.getIpAddress();
-					long tempoAtual = (new Date()).getTime();
-					if (tempoAtual - s.ultimoRecebido > 15000){
-						aRemover.add(ipAddress);
-						continue;
-					}
-					byte[] enviarDados = new byte[1024];
-					int port = 5555;
-					String dados = "pedido " + s.enviar();
-					enviarDados = dados.getBytes();
-					DatagramPacket enviarPacote = new DatagramPacket(enviarDados, enviarDados.length, ipAddress, port);
-					socket.send(enviarPacote);
-				}
-				for (InetAddress ip : aRemover){
-					informacoes.remover(ip);
-				}
-				Thread.sleep(5000);
-			}
-		}
-		catch(IOException | InterruptedException e){
-			e.printStackTrace();
-		}
-	}
-}
+        public Intermediation(InetAddress ip, Socket client) {
+            this.ip = ip;
+            this.client = client;
+        }
 
-class Monitorizacao implements Runnable{
-	Tabela informacoes;
+        @Override
+        public void run() {
+            
+        }
+    }
 
-	Monitorizacao(Tabela informacoes){
-		this.informacoes = informacoes;
-	}
+    private static class Monitorization implements Runnable{
 
-	public void run(){
-		try{
-			DatagramSocket socket = new DatagramSocket(5555);
-			Thread probe = new Thread(new EnviaProbe(informacoes, socket));
-			probe.start();
-			while(true){
-				DatagramPacket receberPacote = receberPacote(socket);
-				String dados = new String(receberPacote.getData(), 0, receberPacote.getLength());
-				String[] pdu = dados.split(" ");
-				if(pdu[0].equals("resposta")){
-					atualizarInformacao(receberPacote, pdu);
-				}
-				else if(pdu[0].equals("registo"))
-				{
-					adicionarServidor(receberPacote);
-				}
-			}
-		}
-		catch(SocketException e){
-			e.printStackTrace();
-		}
-	}
+        Table table;
+        
+        public Monitorization(Table table) {
+            this.table = table;
+        }
 
-	DatagramPacket receberPacote(DatagramSocket socket){
-		try{
-			byte[] receberDados = new byte[1024];
-			DatagramPacket receberPacote = new DatagramPacket(receberDados, receberDados.length);
-			socket.receive(receberPacote); // adormece
-			return receberPacote;
-		}
-		catch(IOException e){
-			e.printStackTrace();
-		}
-		return null;
-	}
+        @Override
+        public void run() {
+            try {
+                DatagramSocket socket = new DatagramSocket(5555);
+                Thread probeRequest = new Thread(new ProbeRequest(socket, this.table));
+                probeRequest.start();
+                byte[] buf = new byte[1024];
+                DatagramPacket packet = new DatagramPacket(buf, 1024);
+                while(true){
+                    try {
+                        socket.receive(packet);
+                        String data = new String(packet.getData(), 0, packet.getLength());
+                        String[] pdu = data.split(" ");
+                        InetAddress ip = packet.getAddress();
+                        if (pdu[0].equals("pooling")){
+                            this.table.available(ip);
+                        }
+                        else //if (pdu[0].equals("probe"))
+                        {
+                            this.table.receive(ip, pdu);
+                        }
+                        
+                        
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            } catch (SocketException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
 
-	void adicionarServidor(DatagramPacket receberPacote){
-		InetAddress ipAddress = receberPacote.getAddress();
-		informacoes.registoServidor(ipAddress);
-	}
+    private static class ProbeRequest implements Runnable{
+        
+        DatagramSocket socket;
+        Table table;
 
-	/*void enviarPedido(DatagramSocket socket, DatagramPacket receberPacote){
-		InetAddress ipAddress;
-		try{
-			byte[] enviarDados = new byte[1024];
-			ipAddress = receberPacote.getAddress();
-			int port = receberPacote.getPort();
-			String dados = "pedido " + informacoes.enviar(ipAddress);
-			enviarDados = dados.getBytes();
-			DatagramPacket enviarPacote = new DatagramPacket(enviarDados, enviarDados.length, ipAddress, port);
-			socket.send(enviarPacote);
-		}
-		catch (IOException e){
-			e.printStackTrace();
-		}
-	}*/
+        public ProbeRequest(DatagramSocket socket, Table table) {
+            this.socket = socket;
+            this.table = table;
+        }
 
-	void atualizarInformacao(DatagramPacket receberPacote, String[] pdu){
-		InetAddress ipAddress = receberPacote.getAddress();
-		informacoes.recebido(ipAddress, pdu[1], pdu[2], pdu[3]);
-	}
-}
+        @Override
+        public void run() {
+            byte[] buf = new byte[1024];
+            while(true){
+                Collection<Server> servers = table.getServers();
+                for (Server s : servers){
+                    if(System.currentTimeMillis() - s.getLastAvailable() > 15000){
+                        table.remove(s.getIP());
+                    }
+                    else{
+                        try {
+                            buf = s.send().getBytes();
+                            DatagramPacket packet = new DatagramPacket(buf, buf.length, s.getIP(), 5555);
+                            this.socket.send(packet);
+                        } catch (IOException ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }
+    }
 
-class ProxyTCP implements Runnable{
+    private static class Server {
 
-	Tabela informacoes;
+        InetAddress ip;
+        long lastAvailable;
+        double rtt;
+        int packetsSent;
+        int nextID;
+        Set<Integer> receivedIDs;
+        int connections;
+        
+        public Server(InetAddress ip) {
+            this.ip = ip;
+            this.receivedIDs = new HashSet<>();
+        }
 
-	ProxyTCP(Tabela informacoes){
-		this.informacoes = informacoes;
-	}
+        private long getLastAvailable() {
+            return this.lastAvailable;
+        }
+        
+        private void setLastAvailable(){
+            this.lastAvailable = System.currentTimeMillis();
+        }
 
-	public void run(){
-		try{
-			ServerSocket servidor = new ServerSocket(80);
-			while(true){
-				Socket cliente = servidor.accept();
-				InetAddress ipAddress = informacoes.getMonitor();
-				Thread c = new Thread(new Intermediacao(cliente, ipAddress));
-				c.start();
-			}
-		}
-		catch(IOException e){
-			e.printStackTrace();
-		}
-	}
-}
+        private String send() {
+            this.packetsSent++;
+            StringBuilder sb = new StringBuilder();
+            sb.append("probe ");
+            sb.append(nextID++);
+            sb.append(" ");
+            sb.append(System.currentTimeMillis());
+            return sb.toString();
+        }
 
-class Intermediacao implements Runnable{
+        private InetAddress getIP() {
+            return ip;
+        }
 
-	Socket cliente;
-	InetAddress ipAddress; // monitor
+        private void receive(int id, int connections, long sendTime, long receiveTime) {
+            if(this.receivedIDs.contains(id)){ //duplicado
+                return;
+            }
+            if (rtt != 0){
+                rtt = ((receiveTime - sendTime) + rtt)/2;
+            }
+            else {
+                rtt = receiveTime - sendTime;
+            }
+            this.receivedIDs.add(id);
+            this.connections = connections;
+        }
 
-	Intermediacao (Socket cliente, InetAddress ipAddress){
-		this.cliente = cliente;
-		this.ipAddress = ipAddress;
-	}
+        private void printData() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(this.ip.toString());
+            sb.append(" -> ");
+            sb.append(this.rtt);
+            sb.append(" ms | ");
+            float lost = ((float) this.packetsSent - this.receivedIDs.size())/this.packetsSent;
+            sb.append(lost);
+            sb.append(" | ");
+            sb.append(this.connections);
+            System.out.println(sb.toString());  
+        }
 
-	public void run(){
-		try{
-			BufferedReader fromCliente = new BufferedReader(new InputStreamReader(cliente.getInputStream()));
-			PrintWriter toCliente = new PrintWriter(cliente.getOutputStream());
-			Socket monitor = new Socket(ipAddress, 80);
-			BufferedReader fromMonitor = new BufferedReader(new InputStreamReader(monitor.getInputStream()));
-			PrintWriter toMonitor = new PrintWriter(monitor.getOutputStream());
-			while(true){
-				String s = fromCliente.readLine();
-				toMonitor.println(s);
-				toMonitor.flush();
+        private double getPriority() {
+            float lost = ((float) this.packetsSent - this.receivedIDs.size())/this.packetsSent;
+            return rtt * lost * connections;
+        }
+    }
 
-				if (s == null)
-					break;
+    private static class TCPProxy implements Runnable{
 
-				s = fromMonitor.readLine();
-				toCliente.println(s);
-				toCliente.flush();
+        Table table;
+        
+        public TCPProxy(Table table) {
+            this.table = table;
+        }
 
-			}
-			cliente.close();
-			monitor.close();
-		}
-		catch(IOException e){
-			e.printStackTrace();
-		}
-	}
-}
+        @Override
+        public void run() {
+            try {
+                ServerSocket socket = new ServerSocket(80);
+                while(true){
+                    Socket client = socket.accept();
+                    InetAddress ip = this.table.getMonitor();
+                    Thread intermediation = new Thread(new Intermediation(ip, client));
+                    intermediation.start();
+                }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
 
+    private static class Table {
 
-class Tabela{
+        Map<InetAddress, Server> servers;
+        
+        public Table() {
+            this.servers = new HashMap<>();
+        }
 
-	Map<InetAddress, Servidor> servidores;
+        private void available(InetAddress ip) {
+            Server server = servers.get(ip);
+            if (server == null){
+                server = new Server(ip);
+                this.servers.put(ip, server);
+            }
+            server.setLastAvailable();
+        }
 
-	Tabela(){
-		servidores = new HashMap<>();
-	}
+        private Collection<Server> getServers() {
+            return this.servers.values();
+        }
 
-	Collection<Servidor> getServidores(){
-		return servidores.values();
-	}
+        private void remove(InetAddress ip) {
+            this.servers.remove(ip);
+        }
 
-	/*String enviar(InetAddress ipAddress){
-		Servidor s = servidores.get(ipAddress);
-		if (s == null){
-			s = new Servidor (ipAddress);
-			servidores.put(ipAddress, s);
-		}
-		return s.enviar();
-	}*/
+        private void receive(InetAddress ip, String[] pdu) {
+            long receiveTime = System.currentTimeMillis();
+            int id = Integer.parseInt(pdu[1]);
+            int connections = Integer.parseInt(pdu[2]);
+            long sendTime = Long.parseLong(pdu[3]);
+            servers.get(ip).receive(id, connections, sendTime, receiveTime);
+            
+            printAll();
+        }
 
-	void registoServidor(InetAddress ipAddress){
-		Servidor s = servidores.get(ipAddress);
-		if (s == null){
-			s = new Servidor(ipAddress);
-			servidores.put(ipAddress, s);
-		}
-		s.novoRegisto();
-	}
+        private void printAll() {
+            System.out.println("IP Address - RTT - Loss rate - TCP connections");
+            for (Server s : this.servers.values()){
+                s.printData();
+            }
+        }
 
-	void recebido(InetAddress ipAddress, String id, String nTCP, String tempo){
-		Servidor s = servidores.get(ipAddress);
-		s.recebido(id, nTCP, tempo);
-		imprimirTabela();
-	}
-
-	void remover(InetAddress ipAddress){
-		servidores.remove(ipAddress);
-	}
-
-	InetAddress getMonitor(){
-		InetAddress ipAddress = null;
-		float prioridade = Float.MAX_VALUE;
-		for (Servidor s : servidores.values()){
-			float p = s.getPrioridade();
-			if (p < prioridade){
-				prioridade = p;
-				ipAddress = s.getIpAddress();
-			}
-		}
-		imprimirTabela();
-		return ipAddress;
-	}
-
-	void imprimirTabela(){
-		System.out.println("IP - RTT - Taxa - Conexões");
-		for (Servidor s : servidores.values()){
-			s.imprimirServidor();
-		}
-	}
-}
-
-class Servidor{
-
-	InetAddress ipAddress;
-	float rtt;
-	int totalEnviados;
-	int conexoes;
-
-	long ultimoRecebido;
-
-	int nextID;
-
-	Set<Integer> idsRecebidos;
-
-	Servidor(InetAddress ipAddress){
-		rtt = Float.MAX_VALUE;
-		conexoes = Integer.MAX_VALUE;
-		this.ipAddress = ipAddress;
-		idsRecebidos = new HashSet<>();
-	}
-
-	void novoRegisto(){
-		//long tempo = (new Date()).getTime();
-		long tempo = System.currentTimeMillis();
-		this.ultimoRecebido = tempo;
-	}
-
-	InetAddress getIpAddress(){
-		return ipAddress;
-	}
-
-	float getPrioridade(){
-		if (totalEnviados == 0 || idsRecebidos.size() == 0){
-			return Float.MAX_VALUE;
-		}
-		return rtt * conexoes * ((float) totalEnviados - idsRecebidos.size())/totalEnviados;
-	}
-
-	String enviar(){
-		//long tempoEnvio = (new Date()).getTime();
-		long tempoEnvio = System.currentTimeMillis();
-		this.totalEnviados++;
-		return Integer.toString(nextID++) + " " + Long.toString(tempoEnvio);
-	}
-
-	void recebido(String stringID, String nTCP, String tempoEnvioExecucao){
-		int id = Integer.parseInt(stringID);
-		if (idsRecebidos.contains(id)){
-			return;
-		}
-		else{
-			idsRecebidos.add(id);
-		}
-		//long tempoRececao = (new Date()).getTime();
-		long tempoRececao = System.currentTimeMillis();
-		this.ultimoRecebido = tempoRececao;
-			
-		long tempo = tempoRececao - Long.parseLong(tempoEnvioExecucao);
-			
-		if (rtt != Float.MAX_VALUE){
-			rtt = (rtt + tempo)/2;
-		}
-		else {
-			rtt = tempo;
-		}
-		this.conexoes = Integer.parseInt(nTCP);
-	}
-
-	void imprimirServidor(){
-		System.out.println(ipAddress + " - " + rtt + " - " + ((float) this.totalEnviados - this.idsRecebidos.size())/totalEnviados + " - " + conexoes);
-	}
-
+        private InetAddress getMonitor() {
+            InetAddress ip = null;
+            double priority = Double.MAX_VALUE;
+            for(Server s : servers.values()){
+                if(s.getPriority() < priority){
+                    ip = s.getIP();
+                }
+            }
+            return ip;
+        }
+        
+        
+    }
 }
