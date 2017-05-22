@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -47,34 +48,31 @@ public class ReverseProxy {
           try {
             BufferedInputStream read = new BufferedInputStream(from.getInputStream());
             BufferedOutputStream write = new BufferedOutputStream(to.getOutputStream());
-            //StringBuilder sb = new StringBuilder();
-            //char s;   
 
             while(to.isConnected() && from.isConnected()) {
-              /*while(read.ready()) {
-                write.println(read.readLine() + "\r");
-                write.flush();
+              /*byte[] buf = new byte[1];
+              int total_read = 0, n_read = 0;
+              while(n_read != -1){
+                buf = Arrays.copyOf(buf, total_read + 1);
+                n_read = read.read(buf, total_read, 1);
+                if (n_read != -1)
+                  total_read += n_read;
               }
-              write.println("\n\r");
-              write.flush();*/
-              /*while(read.ready()) {
-                s = (char) read.read();
-                sb.append(s);
-              }
-              write.print(sb.toString());
+              buf = Arrays.copyOf(buf, total_read);
+              write.write(buf, 0, total_read);
               write.flush();
-
-            //  System.out.print(sb.toString());
-
-              s = (char) read.read();
-              sb = new StringBuilder();
-              sb.append(s);*/
-
+              */
               int readable = read.available();
-              byte[] buf = new byte[readable];
-              int n_read = read.read(buf, 0, readable);
-
-              write.write(buf, 0, n_read);
+              int n_read = 0;
+              byte[] buf = { 0 };
+              int tot = 0;
+              while(readable != 0) {
+                buf = Arrays.copyOf(buf, readable + n_read);
+                n_read = read.read(buf, n_read, readable);
+                tot += n_read;
+                readable = read.available();
+              }
+              write.write(buf, 0, tot);
               write.flush();
             }
             write.close();
