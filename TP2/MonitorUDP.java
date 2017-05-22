@@ -1,4 +1,3 @@
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -11,10 +10,10 @@ import java.net.UnknownHostException;
 /*
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
- */
+*/
 
 /**
- *
+*
  * @author core
  */
 public class MonitorUDP {
@@ -26,9 +25,14 @@ public class MonitorUDP {
             pooling.start();
             Thread probeReply = new Thread(new ProbeReply(socket, ip));
             probeReply.start();
-        } catch (UnknownHostException ex) {
-            ex.printStackTrace();
-        } catch (SocketException ex) {
+
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "/etc/init.d/apache2 start"});
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "sudo mkdir /run/lock"});
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "sudo mkdir /var/log/apache2/"});
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "sudo touch /var/log/apache2/{access,error,other_vhosts_access,suexec}.log"});
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "sudo chown -R root:adm /var/log/apache2/"});
+            Runtime.getRuntime().exec(new String[] {"bash", "-c", "sudo chmod -R 750 /var/log/apache2"});
+        } catch (IOException ex) {
             ex.printStackTrace();
         }
     }
@@ -37,7 +41,7 @@ public class MonitorUDP {
 
         DatagramSocket socket;
         DatagramPacket packet;
-        
+
         public Pooling(DatagramSocket socket, InetAddress ip) {
             this.socket = socket;
             byte[] buf = new byte[1024];
@@ -57,13 +61,13 @@ public class MonitorUDP {
                 } catch (IOException ex) {
                     ex.printStackTrace();
                 }
-                
+
             }
         }
     }
 
     private static class ProbeReply implements Runnable{
-        
+
         DatagramSocket socket;
         InetAddress ip;
 
@@ -79,7 +83,7 @@ public class MonitorUDP {
                     byte[] buf = new byte[1024];
                     DatagramPacket packet = new DatagramPacket(buf, 1024);
                     socket.receive(packet);
-                    
+
                     long startTime = System.currentTimeMillis();
                     String data = new String(packet.getData(), 0, packet.getLength());
                     String[] pdu = data.split(" ");
@@ -96,7 +100,7 @@ public class MonitorUDP {
                     buf = new byte[1024];
                     time += System.currentTimeMillis(); //+= endTime
                     sb.append(time);
-                    
+
                     buf = sb.toString().getBytes();
                     packet = new DatagramPacket(buf, buf.length, ip, 5555);
                     socket.send(packet);

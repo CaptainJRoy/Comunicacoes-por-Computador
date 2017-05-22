@@ -12,6 +12,10 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+
 /*
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
@@ -28,30 +32,58 @@ public class ReverseProxy {
         monitorization.start();
         Thread tcpProxy = new Thread(new TCPProxy(table));
         tcpProxy.start();
-        
+
     }
 
     private static class Intermediation implements Runnable{
-        
-        Socket client;
-        InetAddress ip;
-        
+        Socket from, to;
 
-        public Intermediation(InetAddress ip, Socket client) {
-            this.ip = ip;
-            this.client = client;
+        public Intermediation(Socket from, Socket to) {
+            this.from = from;
+            this.to = to;
         }
 
         @Override
         public void run() {
-            
+          try {
+            BufferedReader read = new BufferedReader(new InputStreamReader(from.getInputStream()));
+            PrintWriter write = new PrintWriter(to.getOutputStream());
+            StringBuilder sb = new StringBuilder();
+            char s;
+
+            while(to.isConnected() && from.isConnected()) {
+              /*while(read.ready()) {
+                write.println(read.readLine() + "\r");
+                write.flush();
+              }
+              write.println("\n\r");
+              write.flush();*/
+              while(read.ready()) {
+                s = (char) read.read();
+                sb.append(s);
+              }
+              write.print(sb.toString());
+              write.println("\n\r");
+              write.flush();
+
+            //  System.out.print(sb.toString());
+
+              s = (char) read.read();
+              sb = new StringBuilder();
+              sb.append(s);
+            }
+            write.close();
+          }
+          catch (IOException ex) {
+            ex.printStackTrace();
+          }
         }
     }
 
     private static class Monitorization implements Runnable{
 
         Table table;
-        
+
         public Monitorization(Table table) {
             this.table = table;
         }
@@ -77,8 +109,8 @@ public class ReverseProxy {
                         {
                             this.table.receive(ip, pdu);
                         }
-                        
-                        
+
+
                     } catch (IOException ex) {
                         ex.printStackTrace();
                     }
@@ -90,7 +122,7 @@ public class ReverseProxy {
     }
 
     private static class ProbeRequest implements Runnable{
-        
+
         DatagramSocket socket;
         Table table;
 
@@ -120,6 +152,7 @@ public class ReverseProxy {
                 }
                 try {
                     Thread.sleep(5000);
+                    table.printAll();
                 } catch (InterruptedException ex) {
                     ex.printStackTrace();
                 }
@@ -136,7 +169,7 @@ public class ReverseProxy {
         int nextID;
         Set<Integer> receivedIDs;
         int connections;
-        
+
         public Server(InetAddress ip) {
             this.ip = ip;
             this.receivedIDs = new HashSet<>();
@@ -145,7 +178,7 @@ public class ReverseProxy {
         private long getLastAvailable() {
             return this.lastAvailable;
         }
-        
+
         private void setLastAvailable(){
             this.lastAvailable = System.currentTimeMillis();
         }
@@ -188,7 +221,7 @@ public class ReverseProxy {
             sb.append(lost);
             sb.append(" | ");
             sb.append(this.connections);
-            System.out.println(sb.toString());  
+            System.out.println(sb.toString());
         }
 
         private double getPriority() {
@@ -200,7 +233,7 @@ public class ReverseProxy {
     private static class TCPProxy implements Runnable{
 
         Table table;
-        
+
         public TCPProxy(Table table) {
             this.table = table;
         }
@@ -212,8 +245,11 @@ public class ReverseProxy {
                 while(true){
                     Socket client = socket.accept();
                     InetAddress ip = this.table.getMonitor();
-                    Thread intermediation = new Thread(new Intermediation(ip, client));
-                    intermediation.start();
+                    Socket monitor = new Socket(ip, 80);
+                    Thread monitor_client = new Thread(new Intermediation(monitor, client));
+                    Thread client_monitor = new Thread(new Intermediation(client, monitor));
+                    monitor_client.start();
+                    client_monitor.start();
                 }
             } catch (IOException ex) {
                 ex.printStackTrace();
@@ -224,7 +260,7 @@ public class ReverseProxy {
     private static class Table {
 
         Map<InetAddress, Server> servers;
-        
+
         public Table() {
             this.servers = new HashMap<>();
         }
@@ -252,8 +288,8 @@ public class ReverseProxy {
             int connections = Integer.parseInt(pdu[2]);
             long sendTime = Long.parseLong(pdu[3]);
             servers.get(ip).receive(id, connections, sendTime, receiveTime);
-            
-            printAll();
+
+            //printAll();
         }
 
         private void printAll() {
@@ -273,7 +309,7 @@ public class ReverseProxy {
             }
             return ip;
         }
-        
-        
+
+
     }
 }
