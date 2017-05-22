@@ -12,9 +12,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 
 /*
  * To change this template, choose Tools | Templates
@@ -46,10 +45,10 @@ public class ReverseProxy {
         @Override
         public void run() {
           try {
-            BufferedReader read = new BufferedReader(new InputStreamReader(from.getInputStream()));
-            PrintWriter write = new PrintWriter(to.getOutputStream());
-            StringBuilder sb = new StringBuilder();
-            char s;
+            BufferedInputStream read = new BufferedInputStream(from.getInputStream());
+            BufferedOutputStream write = new BufferedOutputStream(to.getOutputStream());
+            //StringBuilder sb = new StringBuilder();
+            //char s;   
 
             while(to.isConnected() && from.isConnected()) {
               /*while(read.ready()) {
@@ -58,19 +57,25 @@ public class ReverseProxy {
               }
               write.println("\n\r");
               write.flush();*/
-              while(read.ready()) {
+              /*while(read.ready()) {
                 s = (char) read.read();
                 sb.append(s);
               }
               write.print(sb.toString());
-              write.println("\n\r");
               write.flush();
 
             //  System.out.print(sb.toString());
 
               s = (char) read.read();
               sb = new StringBuilder();
-              sb.append(s);
+              sb.append(s);*/
+
+              int readable = read.available();
+              byte[] buf = new byte[readable];
+              int n_read = read.read(buf, 0, readable);
+
+              write.write(buf, 0, n_read);
+              write.flush();
             }
             write.close();
           }
