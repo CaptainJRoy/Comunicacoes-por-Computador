@@ -50,18 +50,6 @@ public class ReverseProxy {
             BufferedOutputStream write = new BufferedOutputStream(to.getOutputStream());
 
             while(to.isConnected() && from.isConnected()) {
-              /*byte[] buf = new byte[1];
-              int total_read = 0, n_read = 0;
-              while(n_read != -1){
-                buf = Arrays.copyOf(buf, total_read + 1);
-                n_read = read.read(buf, total_read, 1);
-                if (n_read != -1)
-                  total_read += n_read;
-              }
-              buf = Arrays.copyOf(buf, total_read);
-              write.write(buf, 0, total_read);
-              write.flush();
-              */
               int readable = read.available();
               int n_read = 0;
               byte[] buf = { 0 };
@@ -229,7 +217,7 @@ public class ReverseProxy {
 
         private double getPriority() {
             float lost = ((float) this.packetsSent - this.receivedIDs.size())/this.packetsSent;
-            return rtt * lost * connections;
+            return rtt * (1+lost) * (1+connections);
         }
     }
 
@@ -306,7 +294,9 @@ public class ReverseProxy {
             InetAddress ip = null;
             double priority = Double.MAX_VALUE;
             for(Server s : servers.values()){
-                if(s.getPriority() < priority){
+                double p = s.getPriority();
+                if(p < priority){
+                    priority = p;
                     ip = s.getIP();
                 }
             }
